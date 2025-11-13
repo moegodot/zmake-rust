@@ -1,4 +1,6 @@
 #![feature(inherent_associated_types)]
+#![feature(stmt_expr_attributes)]
+#![feature(trim_prefix_suffix)]
 
 mod api;
 
@@ -26,11 +28,28 @@ const STYLES: styling::Styles = styling::Styles::styled()
     bin_name = "zmake",
     version = env!("CARGO_PKG_VERSION"),
     about = "A building system",
-    long_about = "The next-generation building tool that your mom warned you about.",
+    long_about = "The post-modern building tool that your mom warned you about.",
     styles = STYLES)]
 enum Args {
     Information(InformationArgs),
     GenerateComplete(GenerateCompleteArgs),
+    Make(MakeArgs),
+}
+
+#[derive(clap::Args,Debug)]
+#[command(name = "make",about="Build the project")]
+struct MakeArgs{
+    #[arg(long,default_value = "zmakefile.ts", value_hint = clap::ValueHint::FilePath)]
+    projectFile:String,
+
+    #[arg(long,help = "Set the cpu counts that zmake use")]
+    concurrency:Option<usize>,
+}
+impl MakeArgs{
+    pub fn invoke(self){
+        let concurrency = self.concurrency.unwrap_or(num_cpus::get());
+        info!("use concurrency {}",concurrency)
+    }
 }
 
 #[derive(Debug,Clone,ValueEnum)]
@@ -79,6 +98,9 @@ impl GenerateCompleteArgs{
 }
 
 use shadow_rs::{shadow, Format};
+use tracing::{info, Level};
+use tracing_subscriber::FmtSubscriber;
+
 shadow!(build_information);
 #[derive(clap::Args,Debug)]
 #[command(name = "information",about="Print (debug) information about zmake")]
@@ -129,39 +151,48 @@ impl InformationArgs{
         println!();
 
         println!("=============== builtin constants ===============");
-        println!("KAWAYI_GROUP_ID:{}", *api::builtin::zmake::KAWAYI_GROUP_ID);
-        println!("ZMAKE_ARTIFACT_ID:{}", *api::builtin::zmake::ZMAKE_ARTIFACT_ID);
-        println!("ZMAKE_QUALIFIED_ARTIFACT_ID:{}", *api::builtin::zmake::ZMAKE_QUALIFIED_ARTIFACT_ID);
-        println!("ZMAKE_V1V0V0:{}", *api::builtin::zmake::ZMAKE_V1V0V0);
+        println!("KAWAYI_GROUP_ID:{}", *api::builtin::KAWAYI_GROUP_ID);
+        println!("ZMAKE_ARTIFACT_ID:{}", *api::builtin::ZMAKE_ARTIFACT_ID);
+        println!("ZMAKE_QUALIFIED_ARTIFACT_ID:{}", *api::builtin::ZMAKE_QUALIFIED_ARTIFACT_ID);
+        println!("ZMAKE_V1V0V0:{}", *api::builtin::ZMAKE_V1V0V0);
         println!();
 
-        println!("LINUX:{}", (*api::builtin::os::LINUX).0);
-        println!("MACOS:{}", (*api::builtin::os::MACOS).0);
-        println!("WINDOWS:{}", (*api::builtin::os::WINDOWS).0);
+        println!("LINUX:{}", (*api::builtin::LINUX).0);
+        println!("MACOS:{}", (*api::builtin::MACOS).0);
+        println!("WINDOWS:{}", (*api::builtin::WINDOWS).0);
         println!();
 
-        println!("ARM64:{}", (*api::builtin::architecture::ARM64).0);
-        println!("X64:{}", (*api::builtin::architecture::X64).0);
+        println!("ARM64:{}", (*api::builtin::ARM64).0);
+        println!("X64:{}", (*api::builtin::X64).0);
         println!();
 
-        println!("ARCHIVER:{}", (*api::builtin::tool_type::ARCHIVER).0);
+        println!("ARCHIVER:{}", (*api::builtin::ARCHIVER).0);
         println!();
 
-        println!("INITIALIZE:{}", (*api::builtin::target_type::INITIALIZE).0);
-        println!("BUILD:{}", (*api::builtin::target_type::BUILD).0);
-        println!("CLEAN:{}", (*api::builtin::target_type::CLEAN).0);
-        println!("TEST:{}", (*api::builtin::target_type::TEST).0);
-        println!("PACKAGE:{}", (*api::builtin::target_type::PACKAGE).0);
-        println!("INSTALL:{}", (*api::builtin::target_type::INSTALL).0);
-        println!("DEPLOY:{}", (*api::builtin::target_type::DEPLOY).0);
+        println!("INITIALIZE:{}", (*api::builtin::INITIALIZE).0);
+        println!("BUILD:{}", (*api::builtin::BUILD).0);
+        println!("CLEAN:{}", (*api::builtin::CLEAN).0);
+        println!("TEST:{}", (*api::builtin::TEST).0);
+        println!("PACKAGE:{}", (*api::builtin::PACKAGE).0);
+        println!("INSTALL:{}", (*api::builtin::INSTALL).0);
+        println!("DEPLOY:{}", (*api::builtin::DEPLOY).0);
     }
 }
 
 fn main() {
+    let subscriber = FmtSubscriber::builder()
+        .with_ansi(true)
+        .with_max_level(Level::TRACE)
+        .finish();
+
+    tracing::subscriber::set_global_default(subscriber)
+        .expect("setting default subscriber failed");
+
     let args = Args::parse();
 
     match args {
         Args::Information(cmd) => cmd.invoke(),
         Args::GenerateComplete(cmd) => cmd.invoke(),
+        Args::Make(cmd) => cmd.invoke(),
     }
 }

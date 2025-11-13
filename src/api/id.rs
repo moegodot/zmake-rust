@@ -1,10 +1,11 @@
 use semver::Version;
 use std::fmt;
 use std::str::FromStr;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use unicode_ident::{is_xid_continue, is_xid_start};
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq,Hash,Serialize, Deserialize)]
 pub struct Ident {
     ident: String,
 }
@@ -65,7 +66,7 @@ impl FromStr for Ident {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq,Hash,Serialize, Deserialize)]
 pub struct GroupId {
     group_id: Vec<Ident>,
 }
@@ -123,7 +124,7 @@ impl GroupId {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq,Hash,Serialize, Deserialize)]
 pub struct ArtifactId {
     group_id: GroupId,
     artifact_id: Ident,
@@ -189,7 +190,7 @@ impl ArtifactId {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq,Hash,Serialize, Deserialize)]
 pub struct QualifiedArtifactId {
     artifact_id: ArtifactId,
     version: Version,
@@ -243,7 +244,7 @@ impl QualifiedArtifactId {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq,Hash,Serialize, Deserialize)]
 pub struct Id {
     artifact_id: QualifiedArtifactId,
     name: Vec<Ident>,
@@ -314,17 +315,17 @@ pub enum IdError {
 }
 
 /// The type of target,like Build, Test or Install.
-#[derive(Debug,Clone,Eq, PartialEq)]
+#[derive(Debug,Clone,Eq, PartialEq,Hash,Serialize, Deserialize)]
 pub struct TargetType(pub Id);
 /// The computer architecture, like arm64
-#[derive(Debug,Clone,Eq, PartialEq)]
+#[derive(Debug,Clone,Eq, PartialEq,Hash,Serialize, Deserialize)]
 pub struct Architecture(pub Id);
 /// The operating system,like linux.
-#[derive(Debug,Clone,Eq, PartialEq)]
+#[derive(Debug,Clone,Eq, PartialEq,Hash,Serialize, Deserialize)]
 pub struct Os(pub Id);
 /// The type of tool,like c compiler.
-#[derive(Debug,Clone,Eq, PartialEq)]
+#[derive(Debug,Clone,Eq, PartialEq,Hash,Serialize, Deserialize)]
 pub struct ToolType(pub Id);
 /// The name of tool,like gcc or clang.
-#[derive(Debug,Clone,Eq, PartialEq)]
+#[derive(Debug,Clone,Eq, PartialEq,Hash,Serialize, Deserialize)]
 pub struct ToolName(pub Id);
