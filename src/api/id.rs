@@ -315,17 +315,21 @@ pub enum IdError {
 }
 
 /// The type of target,like Build, Test or Install.
-#[derive(Debug,Clone,Eq, PartialEq,Hash,Serialize, Deserialize)]
+#[derive(Debug,Clone,Eq, PartialEq,Hash)]
 pub struct TargetType(pub Id);
 /// The computer architecture, like arm64
-#[derive(Debug,Clone,Eq, PartialEq,Hash,Serialize, Deserialize)]
+#[derive(Debug,Clone,Eq, PartialEq,Hash)]
 pub struct Architecture(pub Id);
 /// The operating system,like linux.
-#[derive(Debug,Clone,Eq, PartialEq,Hash,Serialize, Deserialize)]
+#[derive(Debug,Clone,Eq, PartialEq,Hash)]
 pub struct Os(pub Id);
 /// The type of tool,like c compiler.
-#[derive(Debug,Clone,Eq, PartialEq,Hash,Serialize, Deserialize)]
+#[derive(Debug,Clone,Eq, PartialEq,Hash)]
 pub struct ToolType(pub Id);
 /// The name of tool,like gcc or clang.
-#[derive(Debug,Clone,Eq, PartialEq,Hash,Serialize, Deserialize)]
+#[derive(Debug,Clone,Eq, PartialEq,Hash)]
 pub struct ToolName(pub Id);
+
+use ahash::AHashMap;
+
+pub type FeatureSet = AHashMap<Id, Id>;

@@ -1,5 +1,6 @@
 use std::{env, fs};
 use cfg_if::cfg_if;
+use tracing::trace;
 
 pub struct FileFinder{
     pub paths:Vec<String>,
@@ -24,16 +25,17 @@ impl FileFinder{
 
     pub fn from_env()->Self{
         let prefixes = Vec::<String>::default();
-        let paths = env::var("PATH").unwrap();
-        let paths = if env::consts::OS == "windows"{
-                paths.split(';')
+        let paths = env::var("PATH").unwrap().split(
+            if env::consts::OS == "windows"{
+                ';'
             }
             else{
-                paths.split(':')
-            }
+                ':'
+            })
             .map(|x| x.to_string()).collect();
 
-        let suffixes:Vec<String> = if env::consts::OS == "windows"{
+        let suffixes:Vec<String> =
+            if env::consts::OS == "windows"{
                 env::var("PATHEXT").unwrap().split(';').map(|x| [x.to_string(),x.to_ascii_lowercase()])
                 .flatten()
                 .collect()
@@ -56,8 +58,13 @@ impl FileFinder{
                 for suffix in [String::default()].iter().chain(self.suffixes.iter()){
                     let target = format!("{}/{}{}{}",path,prefix,target,suffix);
 
-                    if fs::exists(&target).unwrap(){
-                        result.push(target)
+                    match fs::exists(&target){
+                        Ok(status) => if status {
+                            trace!("Search {} - found",&target);
+                            result.push(target);
+                        }
+                        else{ trace!("Search {} - not found", target) },
+                        Err(err) => trace!("Search {} - failed to access io - {}", target,err)
                     }
                 }
             }

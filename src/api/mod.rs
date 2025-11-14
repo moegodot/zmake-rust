@@ -4,6 +4,7 @@ pub mod builtin;
 pub mod target;
 pub mod file_finder;
 mod version_extractor;
-mod project_file;
+mod project;
 mod engine;
 mod access_control;
+mod project_resolver;

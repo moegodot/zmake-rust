@@ -5,15 +5,20 @@
 mod api;
 
 use std::fs::File;
-use clap::{CommandFactory, Parser, ValueEnum};
+use clap::{arg, command, Arg, ColorChoice, CommandFactory, Parser, Subcommand, ValueEnum};
 use clap::builder::styling;
-use std::io;
+use std::{env, io};
 use std::io::Write;
+use std::sync::LazyLock;
+use clap::builder::styling::AnsiColor;
+use clap::builder::styling::Color::Ansi;
 use clap_complete::{generate, shells};
+use const_format::concatcp;
+use crate::api::id::ToolType;
 
 const STYLES: styling::Styles = styling::Styles::styled()
-    .header(styling::AnsiColor::Green.on_default().bold())
-    .usage(styling::AnsiColor::Green.on_default().bold())
+    .header(styling::AnsiColor::Green.on_default().bg_color(Some(Ansi(AnsiColor::BrightWhite))).bold())
+    .usage(styling::AnsiColor::Green.on_default().bg_color(Some(Ansi(AnsiColor::BrightWhite))).bold())
     .literal(styling::AnsiColor::BrightWhite.on_default())
     .error(styling::AnsiColor::BrightRed.on_default())
     .context(styling::AnsiColor::Blue.on_default())
@@ -22,15 +27,53 @@ const STYLES: styling::Styles = styling::Styles::styled()
     .invalid(styling::AnsiColor::BrightYellow.on_default())
     .placeholder(styling::AnsiColor::Cyan.on_default().italic().bold());
 
+const ABOUT:&'static str = "The \x1b[35mpost-modern building tool\x1b[0m that your mom warned you about.";
+const BEFORE_HELP:&'static str = concatcp!("打碎旧世界,创立新世界.\n\x1B]8;;",env!("CARGO_PKG_HOMEPAGE"),"\x1B\\\x1b[34;47;4;1m[More Information]\x1B]8;;\x1B\\\x1b[0m");
+const AFTER_HELP:&'static str = concatcp!("早已森严壁垒,更加众志成城.\n\x1B]8;;",env!("CARGO_PKG_HOMEPAGE"),"\x1B\\\x1b[34;47;4;1m[Bug Report]\x1B]8;;\x1B\\\x1b[0m");
+
 #[derive(Parser, Debug)]
 #[command(
-    name = "zmake",
-    bin_name = "zmake",
+    name = env!("CARGO_PKG_NAME"),
+    bin_name = env!("CARGO_BIN_NAME"),
+    author = env!("CARGO_PKG_AUTHORS"),
     version = env!("CARGO_PKG_VERSION"),
-    about = "A building system",
-    long_about = "The post-modern building tool that your mom warned you about.",
+    about = ABOUT,
+    long_about = ABOUT,
+    propagate_version = true,
+    before_help = BEFORE_HELP,
+    before_long_help = BEFORE_HELP,
+    after_help = AFTER_HELP,
+    after_long_help = AFTER_HELP,
+    subcommand_help_heading = "Operations",
     styles = STYLES)]
-enum Args {
+struct Args {
+    #[command(subcommand)]
+    command: SubCommands,
+
+    #[arg(global = true,group = "logging_level",long, help="logging the most detailed information",visible_alias = "verbose")]
+    log_trace: bool,
+
+    #[arg(global = true,group = "logging_level",long, help="logging more detailed information")]
+    log_debug: bool,
+
+    #[arg(global = true,group = "logging_level",long, help="logging common information")]
+    log_information: bool,
+
+    #[arg(global = true,group = "logging_level",long, help="logging warnings only")]
+    log_warning: bool,
+
+    #[arg(global = true,group = "logging_level",long, help="logging errors only")]
+    log_error: bool,
+
+    #[arg(global = true,group = "logging_level",long, help="no logging",visible_alias = "quiet")]
+    log_off: bool,
+
+    #[arg(value_enum, global = true,group = "logging_level",long, help="set logging level", required=false,default_value = "info")]
+    log_level: Level
+}
+
+#[derive(Subcommand, Debug)]
+enum SubCommands {
     Information(InformationArgs),
     GenerateComplete(GenerateCompleteArgs),
     Make(MakeArgs),
@@ -45,6 +88,7 @@ struct MakeArgs{
     #[arg(long,help = "Set the cpu counts that zmake use")]
     concurrency:Option<usize>,
 }
+
 impl MakeArgs{
     pub fn invoke(self){
         let concurrency = self.concurrency.unwrap_or(num_cpus::get());
@@ -180,19 +224,44 @@ impl InformationArgs{
 }
 
 fn main() {
-    let subscriber = FmtSubscriber::builder()
-        .with_ansi(true)
-        .with_max_level(Level::TRACE)
-        .finish();
+    let args = env::args_os();
 
-    tracing::subscriber::set_global_default(subscriber)
-        .expect("setting default subscriber failed");
+    let args =
+        argfile::expand_args_from(
+            args,
+            argfile::parse_fromfile,
+            argfile::PREFIX,
+        ).unwrap();
 
-    let args = Args::parse();
+    let args = Args::parse_from(args);
 
-    match args {
-        Args::Information(cmd) => cmd.invoke(),
-        Args::GenerateComplete(cmd) => cmd.invoke(),
-        Args::Make(cmd) => cmd.invoke(),
+    if !args.log_off {
+        let subscriber = FmtSubscriber::builder()
+            .with_ansi(true)
+            .with_max_level(
+                if args.log_trace {
+                    Level::TRACE
+                } else if args.log_debug {
+                    Level::DEBUG
+                } else if args.log_information {
+                    Level::INFO
+                } else if args.log_warning {
+                    Level::WARN
+                } else if args.log_error {
+                    Level::ERROR
+                } else {
+                    args.log_level
+                }
+            )
+            .finish();
+
+        tracing::subscriber::set_global_default(subscriber)
+            .expect("setting default subscriber failed");
+    }
+
+    match args.command {
+        SubCommands::Information(cmd) => cmd.invoke(),
+        SubCommands::GenerateComplete(cmd) => cmd.invoke(),
+        SubCommands::Make(cmd) => cmd.invoke(),
     }
 }
