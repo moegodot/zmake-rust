@@ -1,11 +1,13 @@
-use std::fs;
-use std::path::PathBuf;
-use ahash::AHashMap;
-use thiserror::Error;
-use tracing::trace_span;
 use crate::api::engine::Engine;
 use crate::api::project::ProjectExported;
-use crate::api::project_resolver::ProjectResolveError::{CircularDependency, FileNotExists, IOError, NotAFile};
+use crate::api::project_resolver::ProjectResolveError::{
+    CircularDependency, FileNotExists, IOError, NotAFile,
+};
+use ahash::AHashMap;
+use std::fs;
+use std::path::PathBuf;
+use thiserror::Error;
+use tracing::{instrument, trace_span};
 
 #[derive(Error, Debug)]
 pub enum ProjectResolveError {
@@ -16,54 +18,53 @@ pub enum ProjectResolveError {
     #[error("detect circular dependency when resolving project {0}")]
     CircularDependency(PathBuf),
     #[error("get an io error")]
-    IOError(#[from] Box<dyn std::error::Error>)
+    IOError(#[from] Box<dyn std::error::Error>),
 }
 
-pub struct ProjectResolver{
-    resolve_engine : Engine,
-    resolved_result: AHashMap<PathBuf,ProjectExported>,
-    resolving: AHashMap<PathBuf,bool>,
+#[derive(Debug)]
+pub struct ProjectResolver {
+    resolve_engine: Engine,
+    resolved_result: AHashMap<PathBuf, ProjectExported>,
+    resolving: AHashMap<PathBuf, bool>,
 }
 
-impl Default for ProjectResolver{
+impl Default for ProjectResolver {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl ProjectResolver{
-    pub fn new() -> Self{
-        ProjectResolver{
-            resolve_engine: Engine::default(),
+impl ProjectResolver {
+    pub fn new() -> Self {
+        ProjectResolver {
+            resolve_engine: Engine::new(Default::default()).unwrap(),
             resolved_result: AHashMap::default(),
-            resolving: AHashMap::default()
+            resolving: AHashMap::default(),
         }
     }
 
-    pub fn resolve_project(&mut self,project_file_path:String)
-        -> Result<(),ProjectResolveError>{
-        let _span = trace_span!("Resolve project",project_file_path).entered();
+    #[instrument]
+    pub fn resolve_project(
+        &mut self,
+        project_file_path: String,
+    ) -> Result<(), ProjectResolveError> {
+        let file = fs::canonicalize(project_file_path).map_err(|x| IOError(x.into()))?;
 
-        let file = fs::canonicalize(project_file_path)
-            .map_err(|x| IOError(x.into()))?;
-
-        if !file.exists(){
+        if !file.exists() {
             return Err(FileNotExists(file));
         }
 
-        if !file.is_file(){
+        if !file.is_file() {
             return Err(NotAFile(file));
         }
 
-        if let Some(status) = self.resolving.get(&file){
+        if let Some(status) = self.resolving.get(&file) {
             return if *status {
                 Err(CircularDependency(file))
-            }
-            else{
+            } else {
                 Ok(())
-            }
-        }
-        else{
+            };
+        } else {
             self.resolving.insert(file.clone(), true);
         }
 

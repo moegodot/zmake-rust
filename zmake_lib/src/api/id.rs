@@ -1,21 +1,21 @@
 use semver::Version;
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
-use serde::{Deserialize, Serialize};
+use strum_macros;
+use strum_macros::{EnumString, IntoStaticStr};
 use thiserror::Error;
 use unicode_ident::{is_xid_continue, is_xid_start};
 
-#[derive(Debug, Clone, Eq, PartialEq,Hash,Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct Ident {
     ident: String,
 }
 
 impl Ident {
-    pub type Err = IdentError;
-
-    pub fn from(ident: &str) -> Result<Self, Self::Err> {
+    pub fn from(ident: &str) -> Result<Self, IdentError> {
         if ident.is_empty() {
-            return Err(Self::Err::EmptyString());
+            return Err(IdentError::EmptyString());
         }
 
         let mut iter = ident.chars();
@@ -23,12 +23,12 @@ impl Ident {
         let first = iter.next().unwrap();
 
         if !is_xid_start(first) {
-            return Err(Self::Err::XidStartFailed(first));
+            return Err(IdentError::XidStartFailed(first));
         }
 
         for following in iter {
             if !is_xid_continue(following) {
-                return Err(Self::Err::XidContinueFailed(following));
+                return Err(IdentError::XidContinueFailed(following));
             }
         }
 
@@ -66,7 +66,7 @@ impl FromStr for Ident {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq,Hash,Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct GroupId {
     group_id: Vec<Ident>,
 }
@@ -96,12 +96,12 @@ impl fmt::Display for GroupId {
 impl FromStr for GroupId {
     type Err = GroupIdError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> Result<Self, GroupIdError> {
         let mut idents = Vec::<Ident>::new();
 
         for ident_str in s.split('.') {
             let result =
-                Ident::from_str(ident_str).map_err(|err| Self::Err::InvalidPart(err.into()))?;
+                Ident::from_str(ident_str).map_err(|err| GroupIdError::InvalidPart(err.into()))?;
             idents.push(result);
         }
 
@@ -110,9 +110,7 @@ impl FromStr for GroupId {
 }
 
 impl GroupId {
-    pub type Err = GroupIdError;
-
-    pub fn from(idents: Vec<Ident>) -> Result<GroupId, GroupIdError> {
+    pub fn from(idents: Vec<Ident>) -> Result<Self, GroupIdError> {
         if idents.is_empty() {
             return Err(GroupIdError::EmptyIdentVec());
         }
@@ -124,7 +122,7 @@ impl GroupId {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq,Hash,Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct ArtifactId {
     group_id: GroupId,
     artifact_id: Ident,
@@ -172,9 +170,7 @@ pub enum ArtifactIdError {
 }
 
 impl ArtifactId {
-    pub type Err = ArtifactIdError;
-
-    pub fn from(group_id: GroupId, artifact_id: Ident) -> ArtifactId {
+    pub fn from(group_id: GroupId, artifact_id: Ident) -> Self {
         ArtifactId {
             group_id,
             artifact_id,
@@ -190,7 +186,7 @@ impl ArtifactId {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq,Hash,Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct QualifiedArtifactId {
     artifact_id: ArtifactId,
     version: Version,
@@ -228,8 +224,6 @@ impl FromStr for QualifiedArtifactId {
 }
 
 impl QualifiedArtifactId {
-    pub type Err = QualifiedArtifactIdError;
-
     pub fn from(artifact_id: ArtifactId, version: Version) -> QualifiedArtifactId {
         QualifiedArtifactId {
             artifact_id,
@@ -243,21 +237,40 @@ impl QualifiedArtifactId {
         &self.version
     }
 }
+#[derive(
+    IntoStaticStr, EnumString, Copy, Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize,
+)]
+#[strum(serialize_all = "snake_case")]
+pub enum IdType {
+    Target,
+    TargetType,
+    Architecture,
+    Os,
+    ToolType,
+    ToolName,
+}
 
-#[derive(Debug, Clone, Eq, PartialEq,Hash,Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct Id {
     artifact_id: QualifiedArtifactId,
+    id_type: IdType,
     name: Vec<Ident>,
 }
 
 impl Id {
-    pub type Err = IdError;
-
-    pub fn from(artifact_id: QualifiedArtifactId, name: Vec<Ident>) -> Result<Id, IdError> {
+    pub fn from(
+        artifact_id: QualifiedArtifactId,
+        id_type: IdType,
+        name: Vec<Ident>,
+    ) -> Result<Self, IdError> {
         if name.is_empty() {
             return Err(IdError::EmptyIdentVec());
         }
-        Ok(Id { artifact_id, name })
+        Ok(Id {
+            artifact_id,
+            id_type,
+            name,
+        })
     }
     pub fn get_artifact_id(&self) -> &QualifiedArtifactId {
         &self.artifact_id
@@ -265,21 +278,30 @@ impl Id {
     pub fn get_name(&self) -> &Vec<Ident> {
         &self.name
     }
+    pub fn get_type(&self) -> IdType {
+        self.id_type
+    }
 }
 
 impl FromStr for Id {
     type Err = IdError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (qualified_artifact_id,name) =
-            s.rsplit_once('#')
+        let (qualified_artifact_id, name) = s
+            .rsplit_once('#')
             .ok_or_else(|| IdError::BadFormat(s.to_string()))?;
 
-        let artifact =
-            QualifiedArtifactId::from_str(qualified_artifact_id)
+        let artifact = QualifiedArtifactId::from_str(qualified_artifact_id)
             .map_err(|err| Self::Err::InvalidPart(err.into()))?;
 
         let mut idents = Vec::<Ident>::new();
+
+        let (type_mark, ident) = name
+            .split_once("::")
+            .ok_or_else(|| IdError::BadFormat(s.to_string()))?;
+
+        let id_type = IdType::try_from(type_mark)
+            .map_err(|_err| IdError::UnknownIdType(type_mark.to_string()))?;
 
         for ident in name.split('.') {
             let result =
@@ -287,7 +309,7 @@ impl FromStr for Id {
             idents.push(result);
         }
 
-        Self::from(artifact, idents)
+        Self::from(artifact, id_type, idents)
     }
 }
 
@@ -312,23 +334,9 @@ pub enum IdError {
     BadFormat(String),
     #[error("failed to parse some part")]
     InvalidPart(#[from] Box<dyn std::error::Error>),
+    #[error("unknown id type `{0}`")]
+    UnknownIdType(String),
 }
-
-/// The type of target,like Build, Test or Install.
-#[derive(Debug,Clone,Eq, PartialEq,Hash)]
-pub struct TargetType(pub Id);
-/// The computer architecture, like arm64
-#[derive(Debug,Clone,Eq, PartialEq,Hash)]
-pub struct Architecture(pub Id);
-/// The operating system,like linux.
-#[derive(Debug,Clone,Eq, PartialEq,Hash)]
-pub struct Os(pub Id);
-/// The type of tool,like c compiler.
-#[derive(Debug,Clone,Eq, PartialEq,Hash)]
-pub struct ToolType(pub Id);
-/// The name of tool,like gcc or clang.
-#[derive(Debug,Clone,Eq, PartialEq,Hash)]
-pub struct ToolName(pub Id);
 
 use ahash::AHashMap;
 

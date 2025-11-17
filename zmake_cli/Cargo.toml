@@ -13,7 +13,7 @@ documentation.workspace = true
 
 [[bin]]
 name = "zmake"
-path = "./src"
+path = "./src/main.rs"
 
 [dependencies]
 clap.workspace = true
@@ -37,10 +37,24 @@ lenient_semver.workspace = true
 deno_core.workspace = true
 deno_fs.workspace = true
 tokio.workspace = true
-#deno_fetch.workspace = true
+exit-code.workspace = true
+
+zmake-lib = { path = "../zmake_lib" }
+
+eyre.workspace = true
+
+color-eyre.workspace = true
+colorchoice-clap.workspace = true
+colorchoice.workspace = true
 
 glob.workspace = true
-anyhow.workspace = true
+
+opentelemetry_sdk.workspace = true
+opentelemetry-stdout.workspace = true
+tracing-opentelemetry.workspace = true
+
+[features]
+default = []
 
 [build-dependencies]
 shadow-rs.workspace = true

@@ -1,18 +1,17 @@
-mod api;
-
-use crate::api::id::ToolType;
-use clap::builder::styling;
 use clap::builder::styling::AnsiColor;
 use clap::builder::styling::Color::Ansi;
+use clap::builder::{Styles, styling};
 use clap::{Arg, ColorChoice, CommandFactory, Parser, Subcommand, ValueEnum, arg, command};
 use clap_complete::{generate, shells};
+use color_eyre::owo_colors::OwoColorize;
 use const_format::concatcp;
 use std::fs::File;
 use std::io::Write;
 use std::sync::LazyLock;
-use std::thread::Builder;
 use std::{env, io};
 use tokio::runtime::Builder;
+use tracing_subscriber::Registry;
+use zmake_lib::api;
 
 const STYLES: styling::Styles = styling::Styles::styled()
     .header(
@@ -36,14 +35,14 @@ const STYLES: styling::Styles = styling::Styles::styled()
     .placeholder(styling::AnsiColor::Cyan.on_default().italic().bold());
 
 const ABOUT: &'static str =
-    "The \x1b[35mpost-modern building tool\x1b[0m that your mom warned you about.";
+    "The \x1b[35mpost-modern building tool\x1b[0m🛠️ that your mom warned you about🤯";
 const BEFORE_HELP: &'static str = concatcp!(
-    "打碎旧世界,创立新世界.\n\x1B]8;;",
+    "打碎💨旧世界⚰️创立🚀新世界❤️‍🔥\n\x1B]8;;",
     env!("CARGO_PKG_HOMEPAGE"),
     "\x1B\\\x1b[34;47;4;1m[More Information]\x1B]8;;\x1B\\\x1b[0m"
 );
 const AFTER_HELP: &'static str = concatcp!(
-    "早已森严壁垒,更加众志成城.\n\x1B]8;;",
+    "早已森严壁垒🧱更加众志成城💪\n\x1B]8;;",
     env!("CARGO_PKG_HOMEPAGE"),
     "\x1B\\\x1b[34;47;4;1m[Bug Report]\x1B]8;;\x1B\\\x1b[0m"
 );
@@ -54,15 +53,15 @@ const AFTER_HELP: &'static str = concatcp!(
     bin_name = env!("CARGO_BIN_NAME"),
     author = env!("CARGO_PKG_AUTHORS"),
     version = env!("CARGO_PKG_VERSION"),
+    propagate_version = true,
     about = ABOUT,
     long_about = ABOUT,
-    propagate_version = true,
     before_help = BEFORE_HELP,
     before_long_help = BEFORE_HELP,
     after_help = AFTER_HELP,
     after_long_help = AFTER_HELP,
-    subcommand_help_heading = "Operations",
-    styles = STYLES)]
+    styles = STYLES,
+    subcommand_help_heading = "Operations")]
 struct Args {
     #[command(subcommand)]
     command: SubCommands,
@@ -127,6 +126,9 @@ struct Args {
         default_value = "info"
     )]
     log_level: Level,
+
+    #[command(flatten)]
+    color: colorchoice_clap::Color,
 }
 
 #[derive(Subcommand, Debug)]
@@ -150,7 +152,7 @@ impl MakeArgs {
     pub fn invoke(self) {
         let concurrency = self.concurrency.unwrap_or(num_cpus::get());
 
-        let builder = Builder::new_multi_thread();
+        let builder = Builder::new_multi_thread().build().unwrap();
 
         info!("use concurrency {}", concurrency)
     }
@@ -297,22 +299,68 @@ impl InformationArgs {
     }
 }
 
-fn main() {
+fn setup_env() {
+    if std::env::var("RUST_SPANTRACE").is_err() {
+        unsafe {
+            #[cfg(debug_assertions)]
+            std::env::set_var("RUST_SPANTRACE", "1");
+            #[cfg(not(debug_assertions))]
+            std::env::set_var("RUST_SPANTRACE", "0");
+        }
+    }
+
+    if std::env::var("RUST_LIB_BACKTRACE").is_err() {
+        unsafe {
+            #[cfg(debug_assertions)]
+            std::env::set_var("RUST_LIB_BACKTRACE", "full");
+            #[cfg(not(debug_assertions))]
+            std::env::set_var("RUST_LIB_BACKTRACE", "1");
+        }
+    }
+}
+
+fn inner_main() -> u8 {
+    let provider = SdkTracerProvider::builder()
+        .with_simple_exporter(opentelemetry_stdout::SpanExporter::default()) // TODO: send information to remote
+        .build();
+
+    let tracer = provider.tracer("zmake");
+
+    let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
+
+    let subscriber = Registry::default().with(telemetry);
+
+    tracing::subscriber::set_global_default(subscriber);
+
     let _span = trace_span!("zmake start", version = env!("CARGO_PKG_VERSION")).entered();
 
-    let _parseArgs = trace_span!("prase arguments").entered();
+    setup_env();
+
+    let parse_args_span: tracing::span::EnteredSpan = trace_span!("prase arguments").entered();
+
     let args = env::args_os();
 
     let args = argfile::expand_args_from(args, argfile::parse_fromfile, argfile::PREFIX).unwrap();
 
     let args = Args::parse_from(args);
 
-    _parseArgs.exit();
+    args.color.write_global();
 
-    if !args.log_off {
-        let subscriber = FmtSubscriber::builder()
-            .with_ansi(true)
-            .with_max_level(if args.log_trace {
+    parse_args_span.exit();
+
+    match ColorChoice::global() {
+        ColorChoice::Auto | ColorChoice::AlwaysAnsi | ColorChoice::Always => {
+            color_eyre::install().unwrap_or_else(|| println!("failed to install color-eyre"));
+        }
+        ColorChoice::Never => {}
+    };
+
+    /*
+    if false {
+        todo!("remove opentelemetry_stdout once we send log to remote and enable this");
+
+        if !args.log_off {
+            let subscriber = FmtSubscriber::builder().with_max_level(if args.log_trace {
                 Level::TRACE
             } else if args.log_debug {
                 Level::DEBUG
@@ -324,16 +372,30 @@ fn main() {
                 Level::ERROR
             } else {
                 args.log_level
-            })
+            });
+
+            let subscriber = match ColorChoice::global() {
+                ColorChoice::AlwaysAnsi | ColorChoice::Always => subscriber.with_ansi(true),
+                ColorChoice::Never => subscriber.with_ansi(false),
+                ColorChoice::Auto => subscriber,
+            }
             .finish();
 
-        tracing::subscriber::set_global_default(subscriber)
-            .expect("setting default subscriber failed");
+            tracing::subscriber::set_global_default(subscriber)
+                .expect("setting default subscriber failed");
+        }
     }
+    */
 
     match args.command {
         SubCommands::Information(cmd) => cmd.invoke(),
         SubCommands::GenerateComplete(cmd) => cmd.invoke(),
         SubCommands::Make(cmd) => cmd.invoke(),
     }
+
+    return exit_code::SUCCESS;
+}
+
+pub fn main() {
+    ::std::process::exit(inner_main());
 }

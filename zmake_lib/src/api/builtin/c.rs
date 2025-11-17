@@ -1,23 +1,19 @@
-﻿use std::str::FromStr;
-use std::sync::LazyLock;
-use crate::api::id::{Id, ToolName, ToolType};
+use crate::make_builtin;
+use ahash::AHashMap;
+use static_init::dynamic;
 
-pub static COMPILER: LazyLock<ToolType> = LazyLock::new(|| {
-    ToolType(Id::from_str("moe.kawayi:zmake@1.0.0#builtin.c.tool_type.compiler").unwrap())
-});
-
-pub static PREPROCESSOR: LazyLock<ToolType> = LazyLock::new(|| {
-    ToolType(Id::from_str("moe.kawayi:zmake@1.0.0#builtin.c.tool_type.preprocessor").unwrap())
-});
-
-pub static GCC: LazyLock<ToolName> = LazyLock::new(|| {
-    ToolName(Id::from_str("moe.kawayi:zmake@1.0.0#builtin.c.tool_name.gcc").unwrap())
-});
-
-pub static CLANG: LazyLock<ToolName> = LazyLock::new(|| {
-    ToolName(Id::from_str("moe.kawayi:zmake@1.0.0#builtin.c.tool_name.clang").unwrap())
-});
-
-pub static MSVC: LazyLock<ToolName> = LazyLock::new(|| {
-    ToolName(Id::from_str("moe.kawayi:zmake@1.0.0#builtin.c.tool_name.preprocessor").unwrap())
-});
+#[dynamic(lazy)]
+pub static BUILTINS: AHashMap<String, crate::api::id::Id> = make_builtin! {
+    "moe.kawayi:zmake@1.0.0" => {
+        crate::api::id::IdType::ToolType =>
+        {
+            "compiler" => "c.compiler",
+            "preprocessor" => "c.preprocessor"
+        },
+        crate::api::id::IdType::ToolName =>{
+            "gcc" => "c.gcc",
+            "clang" => "c.clang",
+            "msvc" => "c.msvc"
+        }
+    }
+};

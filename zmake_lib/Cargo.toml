@@ -1,8 +1,6 @@
 [package]
 name = "zmake-lib"
 
-build = "build.rs"
-
 version.workspace = true
 authors.workspace = true
 description.workspace = true
@@ -10,6 +8,7 @@ homepage.workspace = true
 edition.workspace = true
 repository.workspace = true
 documentation.workspace = true
+build = "build.rs"
 
 [dependencies]
 clap.workspace = true
@@ -33,10 +32,18 @@ lenient_semver.workspace = true
 deno_core.workspace = true
 deno_fs.workspace = true
 tokio.workspace = true
+deno_permissions.workspace = true
+eyre.workspace = true
 #deno_fetch.workspace = true
 
 glob.workspace = true
-anyhow.workspace = true
+
+static_init.workspace = true
+
+strum.workspace = true
+strum_macros.workspace = true
+
+tracing-attributes.workspace = true
 
 [build-dependencies]
 shadow-rs.workspace = true
