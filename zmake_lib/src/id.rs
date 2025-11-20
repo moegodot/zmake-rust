@@ -239,6 +239,8 @@ impl QualifiedArtifactId {
         &self.version
     }
 }
+
+/// modify [make_builtin](crate::make_builtin)'s use IdType::{} too
 #[derive(
     IntoStaticStr, EnumString, Copy, Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize,
 )]
@@ -248,8 +250,9 @@ pub enum IdType {
     TargetType,
     Architecture,
     Os,
+    Tool,
     ToolType,
-    ToolName,
+    Property,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -322,7 +325,7 @@ impl fmt::Display for Id {
             "{}#{}::",
             self.artifact_id,
             <IdType as Into<&'static str>>::into(self.get_type())
-        );
+        )?;
         if let Some(first) = self.name.first() {
             write!(f, "{}", first)?;
             for item in self.name.iter().skip(1) {

@@ -4,7 +4,13 @@
 
 ## Brief And Features
 
-TODO
+ZMake is a building tool that may be the most modern one.
+
+Highlights:
+ - Support remote building,support building colony
+ - Support remote cache,binary or source
+ - Strong project/target/tool name,making customization easy and clearly
+ - Can fetch and publish building script to [esm.sh](https://esm.sh/#docs) or [unpack](https://unpkg.com/) to share
 
 ## Install
 

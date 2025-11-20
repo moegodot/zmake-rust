@@ -5,13 +5,16 @@ use clap::{Arg, ColorChoice, CommandFactory, Parser, Subcommand, ValueEnum, arg,
 use clap_complete::{generate, shells};
 use color_eyre::owo_colors::OwoColorize;
 use const_format::concatcp;
+use opentelemetry::trace::TracerProvider;
+use shadow_rs::{Format, shadow};
 use std::fs::File;
 use std::io::Write;
 use std::sync::LazyLock;
 use std::{env, io};
 use tokio::runtime::Builder;
+use tracing::{Level, info, trace_span};
 use tracing_subscriber::Registry;
-use zmake_lib::api;
+use tracing_subscriber::layer::SubscriberExt;
 
 const STYLES: styling::Styles = styling::Styles::styled()
     .header(
@@ -65,6 +68,13 @@ const AFTER_HELP: &'static str = concatcp!(
 struct Args {
     #[command(subcommand)]
     command: SubCommands,
+
+    #[arg(
+        global = true,
+        long,
+        help = "this will print backtrace and spans but do not set log level"
+    )]
+    backtrace: bool,
 
     #[arg(
         global = true,
@@ -135,14 +145,41 @@ struct Args {
 enum SubCommands {
     Information(InformationArgs),
     GenerateComplete(GenerateCompleteArgs),
+    ExportBuiltin(ExportBuiltinArgs),
     Make(MakeArgs),
+}
+
+#[derive(clap::Args, Debug)]
+#[command(
+    name = "export-builtin",
+    about = "export builtin typescript variable to file or stdout"
+)]
+struct ExportBuiltinArgs {
+    #[arg(long, value_hint = clap::ValueHint::FilePath)]
+    output_file: Option<String>,
+}
+
+impl ExportBuiltinArgs {
+    pub fn invoke(self) {
+        let builtins = zmake_lib::builtin::construct_builtins_typescript_export();
+
+        if self.output_file.is_none() {
+            println!("{}", builtins);
+        } else {
+            let output_file = self.output_file.unwrap();
+
+            let mut output_file = File::create(output_file).unwrap();
+
+            output_file.write_all(builtins.as_bytes()).unwrap();
+        }
+    }
 }
 
 #[derive(clap::Args, Debug)]
 #[command(name = "make", about = "Build the project")]
 struct MakeArgs {
     #[arg(long,default_value = "zmakefile.ts", value_hint = clap::ValueHint::FilePath)]
-    projectFile: String,
+    project_file: String,
 
     #[arg(long, help = "Set the cpu counts that zmake use")]
     concurrency: Option<usize>,
@@ -211,10 +248,6 @@ impl GenerateCompleteArgs {
     }
 }
 
-use shadow_rs::{Format, shadow};
-use tracing::{Level, info, trace_span};
-use tracing_subscriber::FmtSubscriber;
-
 shadow!(build_information);
 #[derive(clap::Args, Debug)]
 #[command(name = "information", about = "Print (debug) information about zmake")]
@@ -267,60 +300,64 @@ impl InformationArgs {
         );
         println!();
 
-        println!("=============== builtin constants ===============");
-        println!("KAWAYI_GROUP_ID:{}", *api::builtin::KAWAYI_GROUP_ID);
-        println!("ZMAKE_ARTIFACT_ID:{}", *api::builtin::ZMAKE_ARTIFACT_ID);
         println!(
-            "ZMAKE_QUALIFIED_ARTIFACT_ID:{}",
-            *api::builtin::ZMAKE_QUALIFIED_ARTIFACT_ID
+            "{}",
+            zmake_lib::builtin::construct_builtins_typescript_export()
         );
-        println!("ZMAKE_V1V0V0:{}", *api::builtin::ZMAKE_V1V0V0);
-        println!();
-
-        println!("LINUX:{}", (*api::builtin::LINUX).0);
-        println!("MACOS:{}", (*api::builtin::MACOS).0);
-        println!("WINDOWS:{}", (*api::builtin::WINDOWS).0);
-        println!();
-
-        println!("ARM64:{}", (*api::builtin::ARM64).0);
-        println!("X64:{}", (*api::builtin::X64).0);
-        println!();
-
-        println!("ARCHIVER:{}", (*api::builtin::ARCHIVER).0);
-        println!();
-
-        println!("INITIALIZE:{}", (*api::builtin::INITIALIZE).0);
-        println!("BUILD:{}", (*api::builtin::BUILD).0);
-        println!("CLEAN:{}", (*api::builtin::CLEAN).0);
-        println!("TEST:{}", (*api::builtin::TEST).0);
-        println!("PACKAGE:{}", (*api::builtin::PACKAGE).0);
-        println!("INSTALL:{}", (*api::builtin::INSTALL).0);
-        println!("DEPLOY:{}", (*api::builtin::DEPLOY).0);
     }
 }
 
-fn setup_env() {
+fn setup_backtrace_env(enable_backtrace: bool) {
+    #[cfg(debug_assertions)]
+    let is_debug = true;
+    #[cfg(not(debug_assertions))]
+    let is_debug = false;
+
+    let enable = is_debug || enable_backtrace;
+
     if std::env::var("RUST_SPANTRACE").is_err() {
         unsafe {
-            #[cfg(debug_assertions)]
-            std::env::set_var("RUST_SPANTRACE", "1");
-            #[cfg(not(debug_assertions))]
-            std::env::set_var("RUST_SPANTRACE", "0");
+            if enable {
+                std::env::set_var("RUST_SPANTRACE", "1");
+            } else {
+                std::env::set_var("RUST_SPANTRACE", "0");
+            }
         }
     }
 
     if std::env::var("RUST_LIB_BACKTRACE").is_err() {
         unsafe {
-            #[cfg(debug_assertions)]
-            std::env::set_var("RUST_LIB_BACKTRACE", "full");
-            #[cfg(not(debug_assertions))]
-            std::env::set_var("RUST_LIB_BACKTRACE", "1");
+            if enable {
+                std::env::set_var("RUST_LIB_BACKTRACE", "full");
+            } else {
+                std::env::set_var("RUST_LIB_BACKTRACE", "1");
+            }
+        }
+    }
+
+    if std::env::var("RUST_BACKTRACE").is_err() {
+        unsafe {
+            if enable {
+                std::env::set_var("RUST_BACKTRACE", "full");
+            } else {
+                std::env::set_var("RUST_BACKTRACE", "1");
+            }
+        }
+    }
+
+    if std::env::var("COLORBT_SHOW_HIDDEN").is_err() {
+        unsafe {
+            if enable {
+                std::env::set_var("COLORBT_SHOW_HIDDEN", "1");
+            } else {
+                std::env::set_var("COLORBT_SHOW_HIDDEN", "0");
+            }
         }
     }
 }
 
-fn inner_main() -> u8 {
-    let provider = SdkTracerProvider::builder()
+fn inner_main() -> i32 {
+    let provider = opentelemetry_sdk::trace::SdkTracerProvider::builder()
         .with_simple_exporter(opentelemetry_stdout::SpanExporter::default()) // TODO: send information to remote
         .build();
 
@@ -330,11 +367,9 @@ fn inner_main() -> u8 {
 
     let subscriber = Registry::default().with(telemetry);
 
-    tracing::subscriber::set_global_default(subscriber);
+    tracing::subscriber::set_global_default(subscriber).unwrap();
 
     let _span = trace_span!("zmake start", version = env!("CARGO_PKG_VERSION")).entered();
-
-    setup_env();
 
     let parse_args_span: tracing::span::EnteredSpan = trace_span!("prase arguments").entered();
 
@@ -344,15 +379,18 @@ fn inner_main() -> u8 {
 
     let args = Args::parse_from(args);
 
-    args.color.write_global();
-
     parse_args_span.exit();
 
-    match ColorChoice::global() {
-        ColorChoice::Auto | ColorChoice::AlwaysAnsi | ColorChoice::Always => {
-            color_eyre::install().unwrap_or_else(|| println!("failed to install color-eyre"));
+    args.color.write_global();
+    setup_backtrace_env(args.backtrace);
+
+    match ::colorchoice::ColorChoice::global() {
+        ::colorchoice::ColorChoice::Auto
+        | ::colorchoice::ColorChoice::AlwaysAnsi
+        | ::colorchoice::ColorChoice::Always => {
+            color_eyre::install().unwrap_or_else(|_| println!("failed to install color-eyre"));
         }
-        ColorChoice::Never => {}
+        ::colorchoice::ColorChoice::Never => {}
     };
 
     /*
@@ -388,9 +426,10 @@ fn inner_main() -> u8 {
     */
 
     match args.command {
-        SubCommands::Information(cmd) => cmd.invoke(),
-        SubCommands::GenerateComplete(cmd) => cmd.invoke(),
-        SubCommands::Make(cmd) => cmd.invoke(),
+        SubCommands::Information(args) => args.invoke(),
+        SubCommands::GenerateComplete(args) => args.invoke(),
+        SubCommands::Make(args) => args.invoke(),
+        SubCommands::ExportBuiltin(args) => args.invoke(),
     }
 
     return exit_code::SUCCESS;

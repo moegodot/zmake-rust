@@ -36,11 +36,13 @@ impl Default for ProjectResolver {
 
 impl ProjectResolver {
     pub fn new() -> Self {
+        todo!();
+        /*
         ProjectResolver {
-            resolve_engine: Engine::new(Default::default()).unwrap(),
             resolved_result: AHashMap::default(),
             resolving: AHashMap::default(),
         }
+         */
     }
 
     #[instrument]

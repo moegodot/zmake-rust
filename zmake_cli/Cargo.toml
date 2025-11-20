@@ -17,38 +17,30 @@ path = "./src/main.rs"
 
 [dependencies]
 clap.workspace = true
-semver.workspace = true
-unicode-ident.workspace = true
-thiserror.workspace = true
-shadow-rs.workspace = true
 clap_complete.workspace = true
-cfg-if.workspace = true
+argfile.workspace = true
+shadow-rs.workspace = true
+
+tokio.workspace = true
+
+const_format.workspace = true
+exit-code.workspace = true
+
 num_cpus.workspace = true
 tracing.workspace = true
-tracing-core.workspace = true
-tracing-subscriber.workspace = true
-serde.workspace = true
-const_format.workspace = true
-serde_json.workspace = true
-ahash.workspace = true
-argfile.workspace = true
-lenient_semver.workspace = true
-
-deno_core.workspace = true
-deno_fs.workspace = true
-tokio.workspace = true
-exit-code.workspace = true
 
 zmake-lib = { path = "../zmake_lib" }
 
 eyre.workspace = true
-
 color-eyre.workspace = true
 colorchoice-clap.workspace = true
 colorchoice.workspace = true
 
 glob.workspace = true
 
+tracing-subscriber.workspace = true
+
+opentelemetry.workspace = true
 opentelemetry_sdk.workspace = true
 opentelemetry-stdout.workspace = true
 tracing-opentelemetry.workspace = true
